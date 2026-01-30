@@ -30,7 +30,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Link da sua planilha de LOGÍSTICA (Aba de entregas)
-SHEET_URL = "SUA_URL_DA_PLANILHA_DE_LOGISTICA_AQUI"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
 
 @st.cache_data(ttl=10)
 def load_logistica():
