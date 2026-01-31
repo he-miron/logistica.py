@@ -41,7 +41,7 @@ if 'autenticado' not in st.session_state:
 # Aba de Pedidos/Entregas
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
 # Aba de Usuários/Motoristas
-USER_SHEET_URL = "SUA_URL_DA_ABA_USUARIOS_AQUI"
+USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
 
 @st.cache_data(ttl=10)
 def load_data(url):
