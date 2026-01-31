@@ -40,7 +40,7 @@ if 'autenticado' not in st.session_state:
 
 # 3. URLs das Planilhas (Verifique se estão publicadas como CSV)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
-USER_SHEET_URL = "SUBSTITUA_PELO_LINK_DA_ABA_USUARIOS_CSV"
+USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
 
 @st.cache_data(ttl=10)
 def load_and_clean_data(url):
