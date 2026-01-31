@@ -2,69 +2,98 @@ import streamlit as st
 import pandas as pd
 
 # 1. Configurações de Página
-st.set_page_config(page_title="SPX Parceiro - Login", layout="centered", page_icon="🚚")
+st.set_page_config(page_title="SPX Parceiro - Logística", layout="centered", page_icon="🚚")
 
-# 2. Sistema de Autenticação Simples
+# 2. Inicialização do Estado de Login
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
+    st.session_state.motorista_id = ""
 
-# 3. Estilo Visual (CSS Customizado)
+# 3. Estilo Visual (CSS SPX Parceiro)
 st.markdown("""
     <style>
     .stApp { background-color: #121212; color: white; }
-    .login-box {
-        background-color: #1e1e1e;
-        padding: 30px;
-        border-radius: 15px;
-        border: 1px solid #ee4d2d;
-        text-align: center;
-    }
-    .stButton>button { background-color: #ee4d2d; color: white; width: 100%; height: 50px; }
+    .login-container { background: #1e1e1e; padding: 40px; border-radius: 20px; border-top: 5px solid #ee4d2d; text-align: center; }
+    .card-pedido { background: #262626; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid #ee4d2d; }
+    .stButton>button { background-color: #ee4d2d; color: white; font-weight: bold; border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
+# --- FUNÇÃO DE LOGIN ---
+def realizar_login(user, pw):
+    # Base de dados simples de motoristas (Pode expandir conforme crescer)
+    motoristas_validos = {
+        "moto_joao": "123",
+        "moto_pedro": "456",
+        "admin": "formosa2026"
+    }
+    if user in motoristas_validos and motoristas_validos[user] == pw:
+        st.session_state.autenticado = True
+        st.session_state.motorista_id = user
+        return True
+    return False
+
 # --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
-    st.markdown('<div style="text-align:center;"><h1 style="color:#ee4d2d;">🚚 SPX LOGÍSTICA</h1><p>Painel do Motorista Parceiro</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063822.png", width=80)
+    st.title("SPX LOGÍSTICA")
+    st.subheader("Login do Parceiro")
     
-    with st.container():
-        st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        usuario = st.text_input("ID do Motorista")
-        senha = st.text_input("Senha de Acesso", type="password")
-        
-        if st.button("ENTRAR NO SISTEMA"):
-            # Aqui você define o login (ex: motorista1 / formosa2026)
-            if usuario == "moto1" and senha == "123":
-                st.session_state.autenticado = True
-                st.rerun()
-            else:
-                st.error("Credenciais inválidas. Fale com a central.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    usuario = st.text_input("Usuário (ID)")
+    senha = st.text_input("Senha", type="password")
+    
+    if st.button("ACESSAR SISTEMA"):
+        if realizar_login(usuario, senha):
+            st.rerun()
+        else:
+            st.error("Usuário ou senha incorretos!")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# --- APP DE LOGÍSTICA (PÁGINA RESTRITA) ---
+# --- ÁREA RESTRITA DO MOTORISTA ---
 else:
-    st.sidebar.button("Sair / Logout", on_click=lambda: st.session_state.update({"autenticado": False}))
+    # Sidebar com informações do motorista
+    st.sidebar.title(f"👤 {st.session_state.motorista_id.upper()}")
+    st.sidebar.write("Status: Online 🟢")
+    if st.sidebar.button("Sair"):
+        st.session_state.autenticado = False
+        st.rerun()
+
+    st.title("📋 Minhas Entregas")
     
-    st.title("🚚 Entregas do Dia")
-    st.write(f"Bem-vindo, Parceiro **{usuario if 'usuario' in locals() else 'Motorista'}**")
-
-    # Conteúdo de Logística (Barcode + Câmera + Rota)
-    tabs = st.tabs(["📋 Rotas", "📸 Comprovante", "📊 Ganhos"])
-
-    with tabs[0]:
-        st.subheader("Pedidos em Formosa")
-        # Simulação de card de entrega
-        st.info("📍 Rua 14, Centro - Entregar para: Maria")
-        if st.button("Abrir Rota no Maps"):
-            st.write("Abrindo GPS...")
-
-    with tabs[1]:
-        st.subheader("Finalizar Entrega")
-        barcode = st.text_input("Escanear Código de Barras")
-        foto = st.camera_input("Foto do Comprovante")
-        if st.button("Confirmar Entrega"):
-            st.success("Dados enviados com sucesso!")
-
-    with tabs[2]:
-        st.metric("Ganhos de Hoje", "R$ 120,50", "+ R$ 15,00")
-        st.write("Total de 8 entregas concluídas.")
+    # Conexão com a Planilha
+    SHEET_URL = "SUA_URL_DA_PLANILHA_AQUI"
+    
+    try:
+        df = pd.read_csv(SHEET_URL)
+        df.columns = [c.strip().lower() for c in df.columns]
+        
+        # FILTRO MÁGICO: Mostra apenas os pedidos deste motorista
+        meus_pedidos = df[df['entregador'] == st.session_state.motorista_id]
+        
+        if meus_pedidos.empty:
+            st.info("Nenhuma entrega pendente para você no momento.")
+        else:
+            for idx, row in meus_pedidos.iterrows():
+                with st.container():
+                    st.markdown(f"""
+                        <div class="card-pedido">
+                            <p style='color:#ee4d2d; font-size:12px; margin:0;'>PEDIDO #{idx}</p>
+                            <p style='font-size:18px; margin:5px 0;'><b>📍 {row['endereco']}</b></p>
+                            <p style='color:#bbb; margin:0;'>Bairro: {row.get('bairro', 'Centro')}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Roteirização e Finalização
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={str(row['endereco']).replace(' ', '+')}+Formosa+GO"
+                        st.link_button("🗺️ Abrir GPS", maps_url)
+                    with col2:
+                        # Abre os detalhes para tirar foto e bipar
+                        with st.expander("✅ Finalizar"):
+                            st.camera_input("Foto do Comprovante", key=f"cam_{idx}")
+                            if st.button("Confirmar", key=f"fin_{idx}"):
+                                st.success("Entrega Concluída!")
+    except Exception as e:
+        st.warning("Adicione a coluna 'entregador' na sua planilha para ver os pedidos.")
