@@ -24,7 +24,7 @@ st.markdown("""
 def buscar_usuarios():
     # URL da aba 'usuarios' da sua planilha (exportada como CSV)
     # Dica: No Google Sheets, vá em Arquivo > Compartilhar > Publicar na Web > Selecione a aba 'usuarios'
-    USER_SHEET_URL = "SUA_URL_DA_ABA_USUARIOS_AQUI"
+    USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pubhtml?gid=221888638&single=true"
     return pd.read_csv(USER_SHEET_URL)
 
 def realizar_login(user_input, pw_input):
