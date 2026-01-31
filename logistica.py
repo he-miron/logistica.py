@@ -8,7 +8,11 @@ st.set_page_config(page_title="SPX Parceiro - Logística", layout="centered", pa
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.motorista_id = ""
+# O app verifica quem é o motorista logado
+usuario_logado = st.session_state.motorista_id 
 
+# O pandas filtra a planilha e cria uma lista só com as entregas dele
+meus_pedidos = df[df['entregador'] == usuario_logado]
 # 3. Estilo Visual (CSS SPX Parceiro)
 st.markdown("""
     <style>
