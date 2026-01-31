@@ -56,7 +56,7 @@ def load_and_clean_data(url):
 if not st.session_state.autenticado:
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     st.image("https://cdn-icons-png.flaticon.com/512/3063/3063822.png", width=80)
-    st.title("SPX LOGÍSTICA")
+    st.title("FSA LOGÍSTICA")
     
     user_input = st.text_input("ID do Motorista").strip().lower()
     pass_input = st.text_input("Senha", type="password").strip()
