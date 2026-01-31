@@ -1,4 +1,13 @@
-import streamlit as st
+import time
+
+# Auto-refresh: O app do motoboy atualiza sozinho a cada 30 segundos
+# para ele não perder nenhuma entrega nova em Formosa.
+count = st.empty()
+if st.sidebar.button('Ativar Monitoramento em Tempo Real'):
+    while True:
+        st.rerun()
+        time.sleep(30)
+        import streamlit as st
 import pandas as pd
 
 # Configuração da Página
