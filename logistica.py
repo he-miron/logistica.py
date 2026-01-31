@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # 1. Configurações de Página
-st.set_page_config(page_title="SPX Parceiro - Formosa", layout="centered", page_icon="🚚")
+st.set_page_config(page_title="FSA Parceiro - Formosa", layout="centered", page_icon="🚚")
 
 # Estilo Visual SPX Dark
 st.markdown("""
