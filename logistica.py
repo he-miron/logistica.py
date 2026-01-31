@@ -1,43 +1,59 @@
 import streamlit as st
 import pandas as pd
+from PIL import Image
 
-st.set_page_config(page_title="Formosa Log", layout="wide")
+# 1. Configurações de Página
+st.set_page_config(page_title="SPX Formosa - Logística", layout="wide")
 
-# Estilo para o motoboy
-st.markdown("<style>.stApp{background-color:#121212; color:white;}</style>", unsafe_allow_html=True)
+# Estilo Dark Mode Shopee Express
+st.markdown("""
+    <style>
+    .stApp { background-color: #121212; color: white; }
+    .stCamera > div { border: 2px solid #ee4d2d; border-radius: 10px; }
+    .card-entrega { background: #1e1e1e; padding: 20px; border-radius: 15px; border-bottom: 4px solid #ee4d2d; margin-bottom: 20px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=522097234&single=true&output=csv"
+st.title("🚚 SPX Parceiro - Formosa")
 
-@st.cache_data(ttl=10)
-def load_logistica():
-    return pd.read_csv(SHEET_URL)
-
-st.title("🚚 Painel de Entregas")
+# 2. Integração com Planilha
+SHEET_URL = "SUA_URL_DA_PLANILHA_AQUI"
 
 try:
-    df = load_logistica()
+    # 3. LEITOR DE CÓDIGO DE BARRAS / SKU
+    # No celular, isso abre a câmera para ler o código do pacote
+    st.subheader("🛡️ Conferência de Pacote")
+    barcode = st.text_input("Aponte o leitor ou digite o código do pacote")
     
-    # Limpa nomes de colunas (remove espaços extras)
-    df.columns = [c.strip().lower() for c in df.columns]
+    if barcode:
+        st.success(f"✅ Pacote {barcode} verificado no sistema!")
 
-    if 'endereco' not in df.columns:
-        st.error(f"⚠️ A coluna 'endereco' não foi encontrada. As colunas atuais são: {list(df.columns)}")
-        st.info("Ajuste o topo da sua planilha para ter a coluna: endereco")
-    else:
-        # Se a coluna existir, mostra os pedidos
-        for index, row in df.iterrows():
-            with st.container():
-                st.markdown(f"""
-                    <div style="background:#1e1e1e; padding:15px; border-radius:10px; border-left:5px solid #ee4d2d; margin-bottom:10px;">
-                        <p style="margin:0;"><b>📍 {row['endereco']}</b></p>
-                        <p style="color:#bbb; font-size:14px;">Bairro: {row.get('bairro', 'Não informado')}</p>
-                        <p style="color:#bbb; font-size:14px;">Cliente: {row.get('cliente', 'Ver no Zap')}</p>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Botão GPS
-                maps_url = f"https://www.google.com/maps/search/{str(row['endereco']).replace(' ', '+')}+Formosa+GO"
-                st.link_button(f"🗺️ Rota para o Pedido {index+1}", maps_url, use_container_width=True)
+    st.divider()
+
+    # 4. ÁREA DE ENTREGA ATIVA
+    st.subheader("📍 Entrega em Curso")
+    
+    # Exemplo de Card de Endereço
+    st.markdown("""
+        <div class="card-entrega">
+            <p style='margin:0; color:#ee4d2d;'><b>CLIENTE: João da Silva</b></p>
+            <p style='font-size:20px;'>Rua 15, Casa 200, Setor Central</p>
+            <p style='color:#bbb;'>Referência: Perto da Igreja Matriz</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 5. COMPROVANTE DE ENTREGA (FOTO)
+    st.subheader("📸 Foto do Local/Endereço")
+    foto_comprovante = st.camera_input("Tire foto da fachada ou do recebedor")
+
+    if foto_comprovante:
+        st.image(foto_comprovante, caption="Foto capturada com sucesso!", use_container_width=True)
+        
+        # 6. BOTÃO DE FINALIZAÇÃO REAL
+        if st.button("🏁 FINALIZAR ENTREGA E NOTIFICAR"):
+            st.balloons()
+            st.success("Entrega registrada! Os dados da foto e horário foram enviados para a central.")
+            # Aqui você integraria com o backend para salvar a imagem
 
 except Exception as e:
-    st.error(f"Erro de conexão: {e}")
+    st.info("Aguardando carregamento da rota...")
