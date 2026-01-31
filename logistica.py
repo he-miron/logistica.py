@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # 1. Configurações de Página
-st.set_page_config(page_title="FSA Parceiro - Formosa", layout="centered", page_icon="🚚")
+st.set_page_config(page_title="SPX Parceiro - Formosa", layout="centered", page_icon="🚚")
 
 # Estilo Visual SPX Dark
 st.markdown("""
@@ -46,9 +46,7 @@ USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKi
 def load_and_clean_data(url):
     try:
         df = pd.read_csv(url)
-        # Limpeza pesada de cabeçalhos
         df.columns = [str(c).strip().lower() for c in df.columns]
-        # Remove acentos e caracteres especiais das colunas
         df.columns = df.columns.str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
         return df
     except Exception as e:
@@ -66,7 +64,6 @@ if not st.session_state.autenticado:
     if st.button("ENTRAR"):
         users_df = load_and_clean_data(USER_SHEET_URL)
         if not users_df.empty and 'usuario' in users_df.columns:
-            # Filtro de login
             valido = users_df[(users_df['usuario'].astype(str).str.lower() == user_input) & 
                               (users_df['senha'].astype(str) == pass_input)]
             
@@ -77,7 +74,6 @@ if not st.session_state.autenticado:
             else:
                 st.error("Usuário ou Senha incorretos.")
         else:
-            # Login de emergência Admin
             if user_input == "admin" and pass_input == "123":
                 st.session_state.autenticado = True
                 st.session_state.motorista_id = "admin"
@@ -101,4 +97,42 @@ else:
         colunas = df.columns.tolist()
         
         if 'entregador' in colunas and 'status' in colunas:
-            # Filtro de entregas pendentes para o motorista log
+            # Filtro de entregas (CORREÇÃO DE INDENTAÇÃO AQUI)
+            motorista_atual = str(st.session_state.motorista_id).lower()
+            minhas_rotas = df[(df['entregador'].astype(str).str.lower() == motorista_atual) & 
+                              (df['status'].astype(str).str.lower() != 'entregue')]
+            
+            if minhas_rotas.empty:
+                st.success("✅ Nenhuma entrega pendente para você!")
+            else:
+                for idx, row in minhas_rotas.iterrows():
+                    with st.container():
+                        st.markdown(f"""
+                            <div class="card-entrega">
+                                <p style='color:#ee4d2d; font-size:12px; margin:0;'>ENTREGA #{idx}</p>
+                                <p style='font-size:18px; margin:5px 0;'><b>📍 {row.get('endereco', 'Endereço Indisponível')}</b></p>
+                                <p style='color:#bbb; margin:0;'>Cliente: {row.get('cliente', 'Ver no Zap')}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        tab_gps, tab_baixa = st.tabs(["🗺️ GPS", "📸 Finalizar"])
+                        
+                        with tab_gps:
+                            end_raw = row.get('endereco', 'Formosa GO')
+                            endereco_url = str(end_raw).replace(' ', '+')
+                            st.link_button("Abrir no Maps", f"https://www.google.com/maps/search/{endereco_url}+Formosa+GO", use_container_width=True)
+                        
+                        with tab_baixa:
+                            foto = st.camera_input("Foto do Local/Comprovante", key=f"f_{idx}")
+                            if st.button("Confirmar Entrega", key=f"b_{idx}"):
+                                if foto:
+                                    st.success("Entrega finalizada com sucesso!")
+                                    st.balloons()
+                                else:
+                                    st.warning("⚠️ Tire a foto para validar a entrega.")
+        else:
+            st.error("Colunas 'entregador' ou 'status' não encontradas na planilha.")
+    else:
+        st.warning("Planilha vazia ou link incorreto.")
+
+st.markdown("<br><hr><center>Formosa Cases Logística v2.1</center>", unsafe_allow_html=True)
