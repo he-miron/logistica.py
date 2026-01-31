@@ -94,10 +94,16 @@ else:
     df = load_data(SHEET_URL)
     
     if not df.empty:
-        # Verifica se as colunas essenciais existem
-        if 'entregador' in df.columns:
-            # Filtro: Pedidos deste motorista que NÃO estão como 'Entregue'
-            minhas_rotas = df[(df['entregador'] == st.session_state.motorista_id) & (df['status'] != 'entregue')]
+       # Verificação de segurança: só filtra se as colunas existirem
+colunas_na_planilha = df.columns.tolist()
+
+if 'entregador' in colunas_na_planilha and 'status' in colunas_na_planilha:
+    # Filtro oficial
+    minhas_rotas = df[(df['entregador'] == st.session_state.motorista_id) & (df['status'].str.lower() != 'entregue')]
+else:
+    st.error(f"⚠️ Erro de Colunas! Sua planilha precisa ter: 'entregador' e 'status'.")
+    st.info(f"Colunas encontradas atualmente: {colunas_na_planilha}")
+    minhas_rotas = pd.DataFrame() # Cria uma lista vazia para não travar o resto do código
             
             if minhas_rotas.empty:
                 st.success("✅ Nenhuma entrega pendente para você!")
