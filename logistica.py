@@ -32,9 +32,18 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 2. Inicialização do Estado
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
-    st.session_state.motorista_id = ""
+# Verifica se existe a combinação usuario + senha na planilha
+            valido = users_df[(users_df['usuario'].astype(str) == user_input) & 
+                              (users_df['senha'].astype(str) == pass_input)]
+            
+            if not valido.empty:
+                st.session_state.autenticado = True
+                st.session_state.motorista_id = user_input
+                st.rerun()
+            else:
+                st.error("Usuário ou senha não encontrados na base.")
+        except Exception as e:
+            st.error(f"Erro ao acessar base de usuários: {e}")
 
 # 3. Função de Dados
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=0&single=true&output=csv"
