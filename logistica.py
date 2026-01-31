@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configurações de Página e Estilo
+# 1. Configurações de Página e Estilo SPX Parceiro
 st.set_page_config(page_title="SPX Parceiro - Formosa", layout="centered", page_icon="🚚")
 
 st.markdown("""
@@ -13,6 +13,7 @@ st.markdown("""
         border-radius: 15px;
         border-left: 6px solid #ee4d2d;
         margin-bottom: 15px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
     .stButton>button {
         background-color: #ee4d2d;
@@ -31,8 +32,43 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Inicialização do Estado
-# Verifica se existe a combinação usuario + senha na planilha
+# 2. Inicialização do Estado (Login e Memória)
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+    st.session_state.motorista_id = ""
+
+# 3. URLs das Planilhas (Substitua pelos seus links CSV do Google Sheets)
+# Aba de Pedidos/Entregas
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
+# Aba de Usuários/Motoristas
+USER_SHEET_URL = "SUA_URL_DA_ABA_USUARIOS_AQUI"
+
+@st.cache_data(ttl=10)
+def load_data(url):
+    try:
+        df = pd.read_csv(url)
+        df.columns = [c.strip().lower() for c in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar planilha: {e}")
+        return pd.DataFrame()
+
+# --- FLUXO DE TELAS ---
+
+if not st.session_state.autenticado:
+    # TELA DE LOGIN
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063822.png", width=80)
+    st.title("SPX LOGÍSTICA")
+    st.write("Acesso Restrito ao Motorista")
+    
+    user_input = st.text_input("ID do Motorista (ex: moto_joao)")
+    pass_input = st.text_input("Senha", type="password")
+    
+    if st.button("ENTRAR"):
+        users_df = load_data(USER_SHEET_URL)
+        if not users_df.empty:
+            # Validação na aba 'usuarios' da planilha
             valido = users_df[(users_df['usuario'].astype(str) == user_input) & 
                               (users_df['senha'].astype(str) == pass_input)]
             
@@ -41,84 +77,59 @@ st.markdown("""
                 st.session_state.motorista_id = user_input
                 st.rerun()
             else:
-                st.error("Usuário ou senha não encontrados na base.")
-        except Exception as e:
-            st.error(f"Erro ao acessar base de usuários: {e}")
-
-# 3. Função de Dados
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=0&single=true&output=csv"
-USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
-
-@st.cache_data(ttl=10)
-def load_data(url):
-    df = pd.read_csv(url)
-    df.columns = [c.strip().lower() for c in df.columns]
-    return df
-
-# --- LÓGICA DE TELAS ---
-
-if not st.session_state.autenticado:
-    # TELA DE LOGIN
-    st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063822.png", width=80)
-    st.title("SPX LOGÍSTICA")
-    
-    user_input = st.text_input("ID do Motorista")
-    pass_input = st.text_input("Senha", type="password")
-    
-    if st.button("ENTRAR"):
-        # Login Temporário enquanto você não configura a aba de usuários
-        if user_input == "moto1" and pass_input == "123":
-            st.session_state.autenticado = True
-            st.session_state.motorista_id = user_input
-            st.rerun()
+                st.error("Login ou Senha incorretos.")
         else:
-            st.error("Credenciais inválidas.")
+            st.warning("Base de usuários não encontrada. Verifique o link da planilha.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    # PAINEL DO MOTORISTA
+    # PAINEL DE LOGÍSTICA (LOGADO)
     st.sidebar.title(f"🚚 {st.session_state.motorista_id.upper()}")
-    if st.sidebar.button("Sair"):
+    if st.sidebar.button("Sair/Logout"):
         st.session_state.autenticado = False
         st.rerun()
 
-    st.title("📋 Minhas Rotas")
+    st.title("📋 Minhas Entregas")
     
-    try:
-        df = load_data(SHEET_URL)
-        
-        # Filtro por motorista (Garanta que a coluna 'entregador' existe na planilha)
+    df = load_data(SHEET_URL)
+    
+    if not df.empty:
+        # Verifica se as colunas essenciais existem
         if 'entregador' in df.columns:
-            entregas = df[(df['entregador'] == st.session_state.motorista_id) & (df['status'] != 'Entregue')]
+            # Filtro: Pedidos deste motorista que NÃO estão como 'Entregue'
+            minhas_rotas = df[(df['entregador'] == st.session_state.motorista_id) & (df['status'] != 'entregue')]
+            
+            if minhas_rotas.empty:
+                st.success("✅ Nenhuma entrega pendente para você!")
+            else:
+                for idx, row in minhas_rotas.iterrows():
+                    with st.container():
+                        st.markdown(f"""
+                            <div class="card-entrega">
+                                <p style='color:#ee4d2d; font-size:12px; margin:0;'>ENTREGA #{idx}</p>
+                                <p style='font-size:18px; margin:5px 0;'><b>📍 {row.get('endereco', 'Endereço Indisponível')}</b></p>
+                                <p style='color:#bbb; margin:0;'>Cliente: {row.get('cliente', 'Ver no Zap')}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        tab_rota, tab_baixa = st.tabs(["🗺️ GPS", "📸 Finalizar"])
+                        
+                        with tab_rota:
+                            end_formatado = str(row.get('endereco', '')).replace(' ', '+')
+                            link_maps = f"https://www.google.com/maps/search/?api=1&query={end_formatado}+Formosa+GO"
+                            st.link_button("Abrir Google Maps", link_maps, use_container_width=True)
+                        
+                        with tab_baixa:
+                            foto = st.camera_input("Foto do Comprovante", key=f"foto_{idx}")
+                            if st.button("Confirmar Recebimento", key=f"btn_{idx}"):
+                                if foto:
+                                    st.success("Entrega finalizada com sucesso!")
+                                    st.balloons()
+                                else:
+                                    st.warning("⚠️ É obrigatório tirar a foto da fachada/comprovante.")
         else:
-            entregas = df # Mostra tudo se a coluna não existir ainda
+            st.error("A coluna 'entregador' não foi encontrada na planilha de pedidos.")
+    else:
+        st.info("Aguardando sincronização com a planilha central...")
 
-        if entregas.empty:
-            st.success("✅ Nenhuma entrega pendente!")
-        else:
-            for idx, row in entregas.iterrows():
-                with st.container():
-                    st.markdown(f"""
-                        <div class="card-entrega">
-                            <p style='color:#ee4d2d; font-size:12px; margin:0;'>PEDIDO #{idx}</p>
-                            <p style='font-size:18px; margin:5px 0;'><b>📍 {row.get('endereco', 'Endereço não cadastrado')}</b></p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    tab_rota, tab_foto = st.tabs(["🗺️ Rota", "📸 Baixa"])
-                    
-                    with tab_rota:
-                        end = str(row.get('endereco', '')).replace(' ', '+')
-                        st.link_button("Abrir Maps", f"https://www.google.com/maps/search/?api=1&query={end}+Formosa+GO", use_container_width=True)
-                    
-                    with tab_foto:
-                        foto = st.camera_input("Foto do Comprovante", key=f"cam_{idx}")
-                        if st.button("Confirmar Entrega", key=f"btn_{idx}"):
-                            if foto:
-                                st.success("Entrega finalizada!")
-                                st.balloons()
-                            else:
-                                st.warning("Tire a foto primeiro!")
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
+st.markdown("<br><hr><center>Formosa Cases Express v2.0</center>", unsafe_allow_html=True)
