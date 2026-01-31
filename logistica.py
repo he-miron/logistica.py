@@ -1,59 +1,70 @@
 import streamlit as st
 import pandas as pd
-from PIL import Image
 
 # 1. Configurações de Página
-st.set_page_config(page_title="SPX Formosa - Logística", layout="wide")
+st.set_page_config(page_title="SPX Parceiro - Login", layout="centered", page_icon="🚚")
 
-# Estilo Dark Mode Shopee Express
+# 2. Sistema de Autenticação Simples
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+
+# 3. Estilo Visual (CSS Customizado)
 st.markdown("""
     <style>
     .stApp { background-color: #121212; color: white; }
-    .stCamera > div { border: 2px solid #ee4d2d; border-radius: 10px; }
-    .card-entrega { background: #1e1e1e; padding: 20px; border-radius: 15px; border-bottom: 4px solid #ee4d2d; margin-bottom: 20px; }
+    .login-box {
+        background-color: #1e1e1e;
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #ee4d2d;
+        text-align: center;
+    }
+    .stButton>button { background-color: #ee4d2d; color: white; width: 100%; height: 50px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚚 SPX Parceiro - Formosa")
-
-# 2. Integração com Planilha
-SHEET_URL = "SUA_URL_DA_PLANILHA_AQUI"
-
-try:
-    # 3. LEITOR DE CÓDIGO DE BARRAS / SKU
-    # No celular, isso abre a câmera para ler o código do pacote
-    st.subheader("🛡️ Conferência de Pacote")
-    barcode = st.text_input("Aponte o leitor ou digite o código do pacote")
+# --- TELA DE LOGIN ---
+if not st.session_state.autenticado:
+    st.markdown('<div style="text-align:center;"><h1 style="color:#ee4d2d;">🚚 SPX LOGÍSTICA</h1><p>Painel do Motorista Parceiro</p></div>', unsafe_allow_html=True)
     
-    if barcode:
-        st.success(f"✅ Pacote {barcode} verificado no sistema!")
-
-    st.divider()
-
-    # 4. ÁREA DE ENTREGA ATIVA
-    st.subheader("📍 Entrega em Curso")
-    
-    # Exemplo de Card de Endereço
-    st.markdown("""
-        <div class="card-entrega">
-            <p style='margin:0; color:#ee4d2d;'><b>CLIENTE: João da Silva</b></p>
-            <p style='font-size:20px;'>Rua 15, Casa 200, Setor Central</p>
-            <p style='color:#bbb;'>Referência: Perto da Igreja Matriz</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # 5. COMPROVANTE DE ENTREGA (FOTO)
-    st.subheader("📸 Foto do Local/Endereço")
-    foto_comprovante = st.camera_input("Tire foto da fachada ou do recebedor")
-
-    if foto_comprovante:
-        st.image(foto_comprovante, caption="Foto capturada com sucesso!", use_container_width=True)
+    with st.container():
+        st.markdown('<div class="login-box">', unsafe_allow_html=True)
+        usuario = st.text_input("ID do Motorista")
+        senha = st.text_input("Senha de Acesso", type="password")
         
-        # 6. BOTÃO DE FINALIZAÇÃO REAL
-        if st.button("🏁 FINALIZAR ENTREGA E NOTIFICAR"):
-            st.balloons()
-            st.success("Entrega registrada! Os dados da foto e horário foram enviados para a central.")
-            # Aqui você integraria com o backend para salvar a imagem
+        if st.button("ENTRAR NO SISTEMA"):
+            # Aqui você define o login (ex: motorista1 / formosa2026)
+            if usuario == "moto1" and senha == "123":
+                st.session_state.autenticado = True
+                st.rerun()
+            else:
+                st.error("Credenciais inválidas. Fale com a central.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-except Exception as e:
-    st.info("Aguardando carregamento da rota...")
+# --- APP DE LOGÍSTICA (PÁGINA RESTRITA) ---
+else:
+    st.sidebar.button("Sair / Logout", on_click=lambda: st.session_state.update({"autenticado": False}))
+    
+    st.title("🚚 Entregas do Dia")
+    st.write(f"Bem-vindo, Parceiro **{usuario if 'usuario' in locals() else 'Motorista'}**")
+
+    # Conteúdo de Logística (Barcode + Câmera + Rota)
+    tabs = st.tabs(["📋 Rotas", "📸 Comprovante", "📊 Ganhos"])
+
+    with tabs[0]:
+        st.subheader("Pedidos em Formosa")
+        # Simulação de card de entrega
+        st.info("📍 Rua 14, Centro - Entregar para: Maria")
+        if st.button("Abrir Rota no Maps"):
+            st.write("Abrindo GPS...")
+
+    with tabs[1]:
+        st.subheader("Finalizar Entrega")
+        barcode = st.text_input("Escanear Código de Barras")
+        foto = st.camera_input("Foto do Comprovante")
+        if st.button("Confirmar Entrega"):
+            st.success("Dados enviados com sucesso!")
+
+    with tabs[2]:
+        st.metric("Ganhos de Hoje", "R$ 120,50", "+ R$ 15,00")
+        st.write("Total de 8 entregas concluídas.")
