@@ -20,17 +20,30 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- FUNÇÃO DE LOGIN ---
-def realizar_login(user, pw):
-    # Base de dados simples de motoristas (Pode expandir conforme crescer)
-    motoristas_validos = {
-        "moto_joao": "123",
-        "moto_pedro": "456",
-        "admin": "formosa2026"
-    }
-    if user in motoristas_validos and motoristas_validos[user] == pw:
-        st.session_state.autenticado = True
-        st.session_state.motorista_id = user
-        return True
+@st.cache_data(ttl=60)
+def buscar_usuarios():
+    # URL da aba 'usuarios' da sua planilha (exportada como CSV)
+    # Dica: No Google Sheets, vá em Arquivo > Compartilhar > Publicar na Web > Selecione a aba 'usuarios'
+    USER_SHEET_URL = "SUA_URL_DA_ABA_USUARIOS_AQUI"
+    return pd.read_csv(USER_SHEET_URL)
+
+def realizar_login(user_input, pw_input):
+    try:
+        df_users = buscar_usuarios()
+        # Limpa espaços e garante comparação correta
+        df_users['usuario'] = df_users['usuario'].astype(str).str.strip()
+        df_users['senha'] = df_users['senha'].astype(str).str.strip()
+        
+        # Procura o usuário na lista
+        usuario_valido = df_users[(df_users['usuario'] == user_input) & (df_users['senha'] == pw_input)]
+        
+        if not usuario_valido.empty:
+            st.session_state.autenticado = True
+            st.session_state.motorista_id = user_input
+            st.session_state.nome_motorista = usuario_valido.iloc[0]['nome_completo']
+            return True
+    except Exception as e:
+        st.error(f"Erro ao validar acesso: {e}")
     return False
 
 # --- TELA DE LOGIN ---
