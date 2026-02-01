@@ -3,105 +3,147 @@ import pandas as pd
 import urllib.parse
 import requests
 import base64
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# 1. Configurações de Página
+# --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="FSA Parceiro", layout="centered", page_icon="🚚")
 
-# --- NOVO: URL DO SCRIPT PARA APAGAR LINHA ---
-SCRIPT_URL_APAGAR = "https://script.google.com/macros/s/AKfycbxS_d7UXSaaFv0NxbXVaaNy8SkBCOJlPS_AWPwPl-m1b4yQUvDi_sq1Um5s_kH_Dhlj/exec"
+# Estilo Visual Dark SPX
+st.markdown("""
+    <style>
+    .stApp { background-color: #121212; color: white; }
+    .card-entrega {
+        background-color: #1e1e1e; padding: 18px; border-radius: 12px;
+        border-left: 6px solid #ee4d2d; margin-bottom: 15px;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.3);
+    }
+    .stButton>button {
+        background-color: #ee4d2d; color: white; font-weight: bold; 
+        border-radius: 8px; width: 100%; height: 45px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- FUNÇÃO PARA GERAR LINK DA IMAGEM (ImgBB) ---
-def fazer_upload_imagem(imagem_arquivo):
-    API_KEY = "1cb13947c3ee801f4cef2fbda3a42c59" 
-    url = "https://api.imgbb.com/1/upload"
+# --- FUNÇÕES DE CONEXÃO E API ---
+
+def conectar_google_sheets():
+    """Conecta na planilha com permissão de edição/deleção"""
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        img_base64 = base64.b64encode(imagem_arquivo.getvalue())
-        payload = {"key": API_KEY, "image": img_base64}
-        res = requests.post(url, payload)
+        # Tenta ler dos Secrets (Nuvem) primeiro, se não achar, busca o arquivo local
+        if "gcp_service_account" in st.secrets:
+            creds_info = st.secrets["gcp_service_account"]
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        else:
+            creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+            
+        client = gspread.authorize(creds)
+        # ID da sua planilha extraído da URL informada
+        ID_PLANILHA = "1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ"
+        return client.open_by_key(ID_PLANILHA).get_worksheet(0)
+    except Exception as e:
+        st.error(f"⚠️ Erro de Conexão: Verifique as credenciais e o compartilhamento da planilha. ({e})")
+        return None
+
+def upload_imgbb(foto_arquivo):
+    """Faz upload da foto e retorna o link direto"""
+    API_KEY = "1cb13947c3ee801f4cef2fbda3a42c59"
+    try:
+        img_b64 = base64.b64encode(foto_arquivo.getvalue())
+        res = requests.post("https://api.imgbb.com/1/upload", {"key": API_KEY, "image": img_b64})
         return res.json()["data"]["url"]
     except:
         return None
 
-# --- FUNÇÃO PARA APAGAR DO GOOGLE SHEETS ---
-def apagar_linha_planilha(id_linha):
-    try:
-        requests.get(f"{SCRIPT_URL_APAGAR}?id={id_linha}")
-        return True
-    except:
-        return False
+# --- LÓGICA DE LOGIN ---
 
-# 2. Persistência de Login
 if 'autenticado' not in st.session_state:
-    params = st.query_params
-    if "user" in params:
+    query_user = st.query_params.get("user")
+    if query_user:
         st.session_state.autenticado = True
-        st.session_state.motorista_id = params["user"]
+        st.session_state.motorista_id = query_user
     else:
         st.session_state.autenticado = False
 
-# 3. URLs de Leitura
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
-USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
-
-@st.cache_data(ttl=2) # TTL menor para atualizar rápido após apagar
-def load_data(url):
-    try:
-        df = pd.read_csv(url)
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        return df
-    except: return pd.DataFrame()
-
-# --- INTERFACE ---
 if not st.session_state.autenticado:
     st.title("🚚 FSA LOGÍSTICA")
     u = st.text_input("ID do Motorista").strip().lower()
     p = st.text_input("Senha", type="password")
+    
     if st.button("ENTRAR"):
-        users = load_data(USER_SHEET_URL)
-        if not users.empty:
-            valido = users[(users['usuario'].astype(str).str.lower() == u) & (users['senha'].astype(str) == p)]
+        USER_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
+        try:
+            users_df = pd.read_csv(USER_CSV)
+            users_df.columns = [c.strip().lower() for c in users_df.columns]
+            valido = users_df[(users_df['usuario'].astype(str).str.lower() == u) & (users_df['senha'].astype(str) == p)]
+            
             if not valido.empty:
                 st.session_state.autenticado = True
                 st.session_state.motorista_id = u
                 st.query_params["user"] = u
                 st.rerun()
-        st.error("Erro nas credenciais.")
+            else:
+                st.error("Usuário ou senha incorretos.")
+        except:
+            st.error("Erro ao validar usuários.")
+
+# --- TELA PRINCIPAL ---
 else:
-    st.sidebar.button("Sair", on_click=lambda: (st.session_state.update({"autenticado": False}), st.query_params.clear()))
-    st.title("📋 Minhas Entregas")
+    st.sidebar.write(f"Conectado como: **{st.session_state.motorista_id.upper()}**")
+    if st.sidebar.button("Sair"):
+        st.session_state.autenticado = False
+        st.query_params.clear()
+        st.rerun()
+
+    st.title("📋 Entregas Pendentes")
     
-    df = load_data(SHEET_URL)
-    if not df.empty and 'entregador' in df.columns:
-        minhas = df[df['entregador'].astype(str).str.lower() == st.session_state.motorista_id.lower()]
+    sheet = conectar_google_sheets()
+    
+    if sheet:
+        # Obtém todos os dados atuais da planilha
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
+        df.columns = [c.strip().lower() for c in df.columns]
         
-        for idx, row in minhas.iterrows():
-            with st.container():
-                st.markdown(f'<div style="background:#1e1e1e; padding:15px; border-radius:10px; border-left:5px solid #ee4d2d; margin-bottom:10px;">📍 <b>{row.get("endereco")}</b></div>', unsafe_allow_html=True)
-                
-                t1, t2 = st.tabs(["🗺️ Rota", "📸 Finalizar"])
-                
-                with t1:
-                    end = str(row.get('endereco')).replace(' ', '+')
-                    st.link_button("🚀 GPS", f"https://www.google.com/maps/dir/?api=1&destination={end}+Formosa+GO")
-                
-                with t2:
-                    foto = st.file_uploader("📸 Comprovante", type=['jpg','png','jpeg'], key=f"f_{idx}")
+        motorista_logado = st.session_state.motorista_id.lower()
+        entregas_filtradas = df[df['entregador'].astype(str).str.lower() == motorista_logado]
+
+        if entregas_filtradas.empty:
+            st.success("✅ Nenhuma entrega pendente para você!")
+        else:
+            for idx, row in entregas_filtradas.iterrows():
+                with st.container():
+                    st.markdown(f'<div class="card-entrega">📍 <b>{row.get("endereco", "N/A")}</b><br><small>Cliente: {row.get("cliente", "N/A")}</small></div>', unsafe_allow_html=True)
                     
-                    if st.button("FINALIZAR E APAGAR ✅", key=f"btn_{idx}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        end_gps = str(row.get('endereco')).replace(' ', '+')
+                        st.link_button("🗺️ Abrir Rota", f"https://www.google.com/maps/dir/?api=1&destination={end_gps}+Formosa+GO")
+                    
+                    with col2:
+                        foto = st.file_uploader("📸 Foto", type=['jpg','jpeg','png'], key=f"foto_{idx}")
+                    
+                    if st.button("CONCLUIR ENTREGA ✅", key=f"btn_{idx}"):
                         if foto:
-                            with st.spinner("Processando baixa..."):
-                                link_da_foto = fazer_upload_imagem(foto)
-                                if link_da_foto:
-                                    # 1. Tenta apagar da planilha
-                                    if apagar_linha_planilha(idx):
-                                        texto = f"✅ *ENTREGA FINALIZADA E BAIXADA*\n\n*Motorista:* {st.session_state.motorista_id.upper()}\n*Local:* {row.get('endereco')}\n*Foto:* {link_da_foto}"
-                                        texto_url = urllib.parse.quote(texto)
-                                        NUMERO_CENTRAL = "556191937857"
-                                        
-                                        st.success("Dados apagados da planilha!")
-                                        st.link_button("📲 Comunicar WhatsApp", f"https://wa.me/{NUMERO_CENTRAL}?text={texto_url}")
-                                        st.cache_data.clear() # Limpa o cache para sumir da tela
-                                    else:
-                                        st.error("Erro ao apagar dados. Verifique o Script.")
+                            with st.spinner("Excluindo registro e salvando comprovante..."):
+                                url_foto = upload_imgbb(foto)
+                                if url_foto:
+                                    # gspread inicia na linha 1 e tem cabeçalho, então linha = index + 2
+                                    sheet.delete_rows(int(idx) + 2)
+                                    
+                                    msg_zap = f"✅ *ENTREGA FINALIZADA*\n\n*Motorista:* {motorista_logado.upper()}\n*Endereço:* {row.get('endereco')}\n*Comprovante:* {url_foto}"
+                                    url_zap = f"https://wa.me/556191937857?text={urllib.parse.quote(msg_zap)}"
+                                    
+                                    st.success("Baixa realizada com sucesso!")
+                                    st.link_button("📲 Notificar WhatsApp", url_zap)
+                                    st.balloons()
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao enviar imagem.")
                         else:
-                            st.warning("Tire a foto antes!")
+                            st.warning("É obrigatório tirar a foto para finalizar!")
+    else:
+        st.warning("Aguardando conexão com o servidor Google...")
+
+st.markdown("<br><center><small>FSA Logística v10.0 - Formosa GO</small></center>", unsafe_allow_html=True)
