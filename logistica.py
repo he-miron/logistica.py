@@ -1,10 +1,14 @@
 import streamlit as st
 import pandas as pd
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 
 # 1. Configurações de Página
 st.set_page_config(page_title="FSA Parceiro - Formosa", layout="centered", page_icon="🚚")
 
-# Estilo Visual SPX Dark (Otimizado para Mobile)
+# Estilo Visual SPX Dark
 st.markdown("""
     <style>
     .stApp { background-color: #121212; color: white; }
@@ -25,7 +29,53 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. URLs e Cache
+# --- FUNÇÃO DE ENVIO DE E-MAIL ---
+def enviar_email_com_foto(foto_arquivo, info_entrega, motorista):
+    destinatario = "mironfsa@gmail.com"
+    remetente_email = "seu_email@gmail.com" # Coloque seu e-mail de envio aqui
+    remetente_senha = "sua_senha_de_app"    # Coloque sua SENHA DE APP aqui
+
+    msg = MIMEMultipart()
+    msg['From'] = remetente_email
+    msg['To'] = destinatario
+    msg['Subject'] = f"Comprovante de Entrega - {info_entrega['id']} - Motorista: {motorista}"
+
+    corpo = f"""
+    <h3>Nova Baixa de Entrega - FSA Logística</h3>
+    <b>Motorista:</b> {motorista}<br>
+    <b>ID da Entrega:</b> {info_entrega['id']}<br>
+    <b>Endereço:</b> {info_entrega['endereco']}<br>
+    <b>Cliente:</b> {info_entrega['cliente']}
+    """
+    msg.attach(MIMEText(corpo, 'html'))
+
+    # Anexar a foto
+    img = MIMEImage(foto_arquivo.read())
+    img.add_header('Content-Disposition', 'attachment', filename="comprovante.jpg")
+    msg.attach(img)
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remetente_email, remetente_senha)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Erro ao enviar e-mail: {e}")
+        return False
+
+# 2. Persistência de Login (Não sai ao atualizar)
+if 'autenticado' not in st.session_state:
+    # Verifica se o ID já está na URL (caso o usuário tenha dado F5)
+    query_id = st.query_params.get("user_id")
+    if query_id:
+        st.session_state.autenticado = True
+        st.session_state.motorista_id = query_id
+    else:
+        st.session_state.autenticado = False
+
+# 3. URLs e Cache
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
 USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
 
@@ -38,10 +88,7 @@ def load_and_clean_data(url):
     except:
         return pd.DataFrame()
 
-# 3. Lógica de Autenticação
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
-
+# --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
     st.title("🚚 FSA LOGÍSTICA")
     user_input = st.text_input("ID do Motorista").strip().lower()
@@ -55,14 +102,17 @@ if not st.session_state.autenticado:
             if not valido.empty:
                 st.session_state.autenticado = True
                 st.session_state.motorista_id = user_input
+                # Salva na URL para não perder o login ao atualizar
+                st.query_params["user_id"] = user_input
                 st.rerun()
         st.error("Credenciais inválidas.")
 
-# 4. Painel de Entregas
+# --- PAINEL DE ENTREGAS ---
 else:
     st.sidebar.write(f"Motorista: **{st.session_state.motorista_id.upper()}**")
-    if st.sidebar.button("Sair"):
+    if st.sidebar.button("Sair / Trocar Conta"):
         st.session_state.autenticado = False
+        st.query_params.clear() # Limpa a URL ao sair
         st.rerun()
 
     st.title("📋 Minhas Entregas")
@@ -86,26 +136,30 @@ else:
                         </div>
                     """, unsafe_allow_html=True)
                     
-                    tab1, tab2 = st.tabs(["🗺️ Rota", "📸 Baixa"])
+                    t1, t2 = st.tabs(["🗺️ Rota", "📸 Baixa"])
                     
-                    with tab1:
-                        # Link do Google Maps corrigido para máxima compatibilidade
+                    with t1:
                         end_dest = f"{row.get('endereco', '')} Formosa GO"
-                        maps_url = f"https://www.google.com/maps/search/?api=1&query={end_dest.replace(' ', '+')}"
-                        st.link_button("🚀 Iniciar GPS", maps_url)
+                        maps_url = f"https://www.google.com/maps/dir/?api=1&destination={end_dest.replace(' ', '+')}"
+                        st.link_button("🚀 Abrir GPS", maps_url)
 
-                    with tab2:
-                        # SOLUÇÃO PARA A CÂMERA: file_uploader abre a câmera nativa no celular
-                        foto = st.file_uploader("Capturar Comprovante", type=['png', 'jpg', 'jpeg'], key=f"foto_{idx}")
+                    with t2:
+                        foto = st.file_uploader("Tirar Foto do Comprovante", type=['jpg', 'jpeg', 'png'], key=f"f_{idx}")
                         
-                        if foto:
-                            st.image(foto, caption="Foto carregada", width=150)
-                            
-                        if st.button("Confirmar Entrega ✅", key=f"btn_{idx}"):
+                        if st.button("Confirmar Entrega ✅", key=f"b_{idx}"):
                             if foto:
-                                st.success(f"Entrega {idx} finalizada!")
-                                st.balloons()
+                                with st.spinner("Enviando comprovante para central..."):
+                                    info = {
+                                        "id": idx,
+                                        "endereco": row.get('endereco', 'N/A'),
+                                        "cliente": row.get('cliente', 'N/A')
+                                    }
+                                    sucesso = enviar_email_com_foto(foto, info, st.session_state.motorista_id)
+                                    
+                                    if sucesso:
+                                        st.success("Entrega finalizada e e-mail enviado!")
+                                        st.balloons()
+                                    else:
+                                        st.error("Erro ao enviar e-mail. Verifique a conexão.")
                             else:
-                                st.warning("Por favor, tire a foto antes de confirmar.")
-    else:
-        st.info("Aguardando carregamento da base de dados...")
+                                st.warning("⚠️ Você precisa tirar a foto para confirmar.")
