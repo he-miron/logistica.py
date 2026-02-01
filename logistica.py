@@ -1,27 +1,33 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
+import requests
+import base64
 
 # 1. Configurações de Página
 st.set_page_config(page_title="FSA Parceiro", layout="centered", page_icon="🚚")
 
-# Estilo Visual SPX Dark
-st.markdown("""
-    <style>
-    .stApp { background-color: #121212; color: white; }
-    .card-entrega {
-        background-color: #1e1e1e; padding: 15px; border-radius: 12px;
-        border-left: 5px solid #ee4d2d; margin-bottom: 10px;
-    }
-    .stButton>button {
-        background-color: #ee4d2d; color: white; font-weight: bold; border-radius: 8px; width: 100%;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# --- FUNÇÃO PARA GERAR LINK DA IMAGEM (ImgBB) ---
+def fazer_upload_imagem(imagem_arquivo):
+    # Crie sua conta grátis em https://api.imgbb.com/ para pegar sua chave
+    API_KEY = "1cb13947c3ee801f4cef2fbda3a42c59" 
+    url = "https://api.imgbb.com/1/upload"
+    
+    try:
+        # Prepara a imagem para envio
+        img_base64 = base64.b64encode(imagem_arquivo.getvalue())
+        payload = {
+            "key": API_KEY,
+            "image": img_base64,
+        }
+        res = requests.post(url, payload)
+        json_data = res.json()
+        return json_data["data"]["url"] # Retorna o link direto da foto
+    except:
+        return None
 
-# 2. PERSISTÊNCIA DE LOGIN (Não desloga nunca)
+# 2. Persistência de Login
 if 'autenticado' not in st.session_state:
-    # Tenta recuperar o login pela URL (caso o motorista atualize a página)
     params = st.query_params
     if "user" in params:
         st.session_state.autenticado = True
@@ -29,7 +35,7 @@ if 'autenticado' not in st.session_state:
     else:
         st.session_state.autenticado = False
 
-# 3. URLs das Planilhas
+# 3. URLs
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?output=csv"
 USER_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhJW43nfokHKiBwhu64dORzbzD8m8Haxy8tEbGRsysr8JG1Wq8s7qgRfHT5ZLLUBkAuHzUJFKODEDZ/pub?gid=221888638&single=true&output=csv"
 
@@ -41,12 +47,11 @@ def load_data(url):
         return df
     except: return pd.DataFrame()
 
-# --- TELA DE LOGIN ---
+# --- INTERFACE ---
 if not st.session_state.autenticado:
     st.title("🚚 FSA LOGÍSTICA")
     u = st.text_input("ID do Motorista").strip().lower()
     p = st.text_input("Senha", type="password")
-    
     if st.button("ENTRAR"):
         users = load_data(USER_SHEET_URL)
         if not users.empty:
@@ -54,69 +59,50 @@ if not st.session_state.autenticado:
             if not valido.empty:
                 st.session_state.autenticado = True
                 st.session_state.motorista_id = u
-                st.query_params["user"] = u # Salva na URL
+                st.query_params["user"] = u
                 st.rerun()
-        st.error("Usuário ou senha incorretos.")
-
-# --- PAINEL DE ENTREGAS ---
+        st.error("Erro nas credenciais.")
 else:
-    st.sidebar.write(f"Motorista: **{st.session_state.motorista_id.upper()}**")
-    if st.sidebar.button("Sair"):
-        st.query_params.clear()
-        st.session_state.autenticado = False
-        st.rerun()
-
+    st.sidebar.button("Sair", on_click=lambda: (st.session_state.update({"autenticado": False}), st.query_params.clear()))
     st.title("📋 Minhas Entregas")
-    df = load_data(SHEET_URL)
     
+    df = load_data(SHEET_URL)
     if not df.empty and 'entregador' in df.columns:
-        motorista = st.session_state.motorista_id.lower()
-        minhas = df[df['entregador'].astype(str).str.lower() == motorista]
+        minhas = df[df['entregador'].astype(str).str.lower() == st.session_state.motorista_id.lower()]
         
         for idx, row in minhas.iterrows():
             if str(row.get('status')).lower() == 'entregue': continue
             
             with st.container():
-                st.markdown(f"""
-                <div class="card-entrega">
-                    📍 <b>{row.get('endereco', 'Endereço N/A')}</b><br>
-                    <small>Cliente: {row.get('cliente', 'N/A')}</small>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#1e1e1e; padding:15px; border-radius:10px; border-left:5px solid #ee4d2d; margin-bottom:10px;">📍 <b>{row.get("endereco")}</b></div>', unsafe_allow_html=True)
                 
                 t1, t2 = st.tabs(["🗺️ Rota", "📸 Finalizar"])
                 
                 with t1:
-                    # Rota Direta no Google Maps
-                    end_limpo = str(row.get('endereco')).replace(' ', '+')
-                    st.link_button("🚀 Abrir Google Maps", f"https://www.google.com/maps/dir/?api=1&destination={end_limpo}+Formosa+GO")
+                    end = str(row.get('endereco')).replace(' ', '+')
+                    st.link_button("🚀 GPS", f"https://www.google.com/maps/dir/?api=1&destination={end}+Formosa+GO")
                 
                 with t2:
-                    # Câmera traseira via file_uploader
-                    foto = st.file_uploader("Capturar Foto do Comprovante", type=['jpg','png','jpeg'], key=f"f_{idx}")
+                    foto = st.file_uploader("📸 Foto do Comprovante", type=['jpg','png','jpeg'], key=f"f_{idx}")
                     
-                    if foto:
-                        st.image(foto, width=150)
-                        
-                        # Prepara o texto para o WhatsApp
-                        texto_zap = f"✅ *BAIXA DE ENTREGA - FSA*\n\n" \
-                                    f"*Motorista:* {st.session_state.motorista_id.upper()}\n" \
-                                    f"*ID:* {idx}\n" \
-                                    f"*Local:* {row.get('endereco')}\n" \
-                                    f"*Cliente:* {row.get('cliente')}"
-                        
-                        texto_url = urllib.parse.quote(texto_zap)
-                        
-                        # --- COLOQUE O NÚMERO DE WHATSAPP DA CENTRAL AQUI ---
-                        # Exemplo: 5561999999999
-                        NUMERO_CENTRAL = "556191937857" 
-                        
-                        st.link_button("📲 Enviar Foto p/ Central (WhatsApp)", 
-                                       f"https://wa.me/{NUMERO_CENTRAL}?text={texto_url}")
-                        
-                        st.info("Clique no botão acima para abrir o Zap e anexe a foto que você tirou.")
-
-    else:
-        st.warning("Nenhuma entrega encontrada para você hoje.")
-
-st.markdown("<br><center><small>FSA Logística v5.0 - Formosa GO</small></center>", unsafe_allow_html=True)
+                    if st.button("GERAR BAIXA ✅", key=f"btn_{idx}"):
+                        if foto:
+                            with st.spinner("Gerando link da imagem..."):
+                                link_da_foto = fazer_upload_imagem(foto)
+                                
+                                if link_da_foto:
+                                    # Monta a mensagem para o Zap com o LINK da foto incluído
+                                    texto = f"✅ *ENTREGA REALIZADA*\n\n" \
+                                            f"*Motorista:* {st.session_state.motorista_id.upper()}\n" \
+                                            f"*Local:* {row.get('endereco')}\n" \
+                                            f"*Foto do Comprovante:* {link_da_foto}"
+                                    
+                                    texto_url = urllib.parse.quote(texto)
+                                    NUMERO_CENTRAL = "556191937857" # COLOQUE O SEU NÚMERO AQUI
+                                    
+                                    st.success("Link gerado! Clique abaixo para enviar.")
+                                    st.link_button("📲 Enviar Tudo via WhatsApp", f"https://wa.me/{NUMERO_CENTRAL}?text={texto_url}")
+                                else:
+                                    st.error("Erro ao subir imagem. Verifique a API Key do ImgBB.")
+                        else:
+                            st.warning("Tire a foto antes!")
