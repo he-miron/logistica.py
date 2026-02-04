@@ -4,7 +4,7 @@ from PIL import Image
 import urllib.parse
 
 # Configuração da Página
-st.set_page_config(page_title="FSA Smart Vision", layout="centered", page_icon="👁️")
+st.set_page_config(page_title="AQUINO Smart Vision", layout="centered", page_icon="👁️")
 
 # --- AUTENTICAÇÃO SEGURA ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -48,7 +48,7 @@ def processar_ia(imagem_pil, modo):
     return response.text
 
 # --- INTERFACE ---
-st.title("👁️ FSA Smart Vision")
+st.title("👁️ AQUINO Smart Vision")
 st.write(f"Conectado ao modelo: `{NOME_MODELO if API_KEY else 'Aguardando...'}`")
 
 modo = st.radio("Selecione o Uso:", ["📦 Logística", "⚕️ Decifrador"])
