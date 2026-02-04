@@ -1,89 +1,85 @@
 import streamlit as st
-import pytesseract
-from PIL import Image, ImageOps, ImageEnhance
-import re
-import pandas as pd
+import google.generativeai as genai
+from PIL import Image
 import urllib.parse
 
-# Configuração
-st.set_page_config(page_title="FSA Smart Scanner", layout="centered")
+# Configuração da Página
+st.set_page_config(page_title="FSA Smart Reader", layout="centered", page_icon="👁️")
 
-if "fila" not in st.session_state:
-    st.session_state.fila = []
+# Inserir sua chave API do Google AI Studio aqui
+# Obtenha em: https://aistudio.google.com/
+API_KEY = "AIzaSyAUooaL_Af80P4QwGq7Kv3mgL6AaP0_fOE"
+genai.configure(api_key=API_KEY)
 
-def tratar_imagem(imagem):
-    # 1. Converte para escala de cinza
-    img = ImageOps.grayscale(imagem)
-    # 2. Aumenta o contraste (ajuda a separar letra do fundo)
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(2.0)
-    # 3. Binarização (Preto e Branco puro)
-    img = img.point(lambda x: 0 if x < 140 else 255, '1')
-    return img
+# Estilo para parecer um App Nativo Premium
+st.markdown("""
+    <style>
+    .stCamera { border: 4px solid #7000FF; border-radius: 20px; }
+    .result-box { background-color: #1e1e1e; padding: 20px; border-radius: 15px; border-left: 6px solid #00FF00; }
+    </style>
+    """, unsafe_allow_html=True)
 
-def extrair_endereco_robusto(imagem):
-    img_tratada = tratar_imagem(imagem)
-    # Configuração do Tesseract para ler blocos de texto
-    config_tesseract = '--psm 3' 
-    texto_bruto = pytesseract.image_to_string(img_tratada, lang='por', config=config_tesseract)
+if "lista_leitura" not in st.session_state:
+    st.session_state.lista_leitura = []
+
+def processar_com_ia(imagem_pil, modo):
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    linhas = [line.strip() for line in texto_bruto.split('\n') if len(line.strip()) > 5]
-    
-    cep = None
-    logradouro = "Não identificado"
-    
-    # Busca CEP em todas as linhas
-    for linha in linhas:
-        busca_cep = re.search(r'(\d{5}-?\d{3})', linha)
-        if busca_cep:
-            cep = busca_cep.group(1)
-        
-        # Lógica para identificar a rua: Geralmente contém números e palavras como Rua, Av, Quadra, Casa...
-        if any(keyword in linha.upper() for keyword in ["RUA", "AV", "AVENIDA", "QDR", "QUADRA", "CASA", "LOTE", "SETOR"]):
-            logradouro = linha
+    if modo == "Etiqueta/Logística":
+        prompt = """
+        Analise esta etiqueta. Extraia APENAS o endereço completo e o CEP. 
+        Formate a resposta exatamente assim:
+        Endereço: [Rua, Número, Bairro, Cidade]
+        CEP: [Somente números]
+        Se houver nome de cliente, adicione:
+        Cliente: [Nome]
+        """
+    else:
+        prompt = """
+        Você é um especialista em decifrar caligrafia cursiva e receitas médicas. 
+        Transcreva o texto da imagem de forma fiel. Se for uma receita, organize por:
+        1. Medicamentos e Dosagens
+        2. Instruções de Uso
+        Seja preciso, mesmo com letras difíceis.
+        """
 
-    return cep, logradouro, texto_bruto
+    response = model.generate_content([prompt, imagem_pil])
+    return response.text
 
 # --- Interface ---
-st.title("🚀 Scanner de Alta Precisão FSA")
-st.write("Dica: Mantenha a etiqueta reta e bem iluminada.")
+st.title("👁️ FSA Smart Vision")
+modo = st.segmented_control("O que vamos ler?", ["Etiqueta/Logística", "Receita/Cursiva"], default="Etiqueta/Logística")
 
-foto = st.camera_input("SCANNER")
+foto = st.camera_input("CAPTURE A IMAGEM")
 
 if foto:
-    img_original = Image.open(foto)
-    cep, endereco, bruto = extrair_endereco_robusto(img_original)
+    img = Image.open(foto)
     
-    if cep or endereco != "Não identificado":
-        st.subheader("📍 Dados Capturados")
-        
-        # Permite edição rápida caso o OCR erre uma letra ou número
-        ed_end = st.text_input("Endereço:", value=endereco)
-        ed_cep = st.text_input("CEP:", value=cep if cep else "")
-        
-        if st.button("✅ Confirmar e Salvar na Fila"):
-            maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ed_end + ' ' + ed_cep)}"
-            st.session_state.fila.append({
-                "Local": ed_end,
-                "CEP": ed_cep,
-                "Maps": maps_link
-            })
-            st.success("Adicionado à rota!")
-            st.rerun()
-    else:
-        st.error("Não foi possível isolar o endereço. Tente tirar a foto mais de perto.")
-        with st.expander("Ver o que o sistema 'leu'"):
-            st.text(bruto)
+    with st.spinner('A IA está decifrando a caligrafia...'):
+        try:
+            texto_decifrado = processar_com_ia(img, modo)
+            
+            st.markdown("### 📝 Resultado da Análise")
+            st.markdown(f"<div class='result-box'>{texto_decifrado}</div>", unsafe_allow_html=True)
 
-# --- Fila de Trabalho ---
-if st.session_state.fila:
-    st.write("---")
-    st.subheader("🚚 Roteiro de Entrega")
-    for i, item in enumerate(st.session_state.fila):
-        col1, col2 = st.columns([3, 1])
-        col1.write(f"**{i+1}.** {item['Local']} ({item['CEP']})")
-        col2.link_button("Ir para GPS", item['Maps'])
+            if modo == "Etiqueta/Logística":
+                # Botão para abrir no Maps automaticamente
+                # Tentamos extrair o endereço do texto para o link
+                if "Endereço:" in texto_decifrado:
+                    endereco_limpo = texto_decifrado.split("Endereço:")[1].split("\n")[0]
+                    link_maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(endereco_limpo)}"
+                    st.link_button("🚀 INICIAR ROTA NO GPS", link_maps)
+            
+            if st.button("📥 Salvar na Fila"):
+                st.session_state.lista_leitura.append(texto_decifrado)
+                st.toast("Salvo com sucesso!")
 
-    if st.button("Limpar Tudo"):
-        st.session_state.fila = []
-        st.rerun()
+        except Exception as e:
+            st.error(f"Erro ao processar: {e}. Verifique sua chave API.")
+
+# Histórico Rápido
+if st.session_state.lista_leitura:
+    with st.expander("📋 Histórico de Leituras"):
+        for item in reversed(st.session_state.lista_leitura):
+            st.write(item)
+            st.divider()
