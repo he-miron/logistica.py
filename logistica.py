@@ -1,85 +1,79 @@
 import streamlit as st
-import easyocr
-import numpy as np
+import pytesseract
 from PIL import Image
-import pandas as pd
+import re
 import folium
 from streamlit_folium import st_folium
-import requests
 
 # Configuração da página
 st.set_page_config(page_title="FSA Roteirizador", layout="wide")
 
-# Inicializa o leitor de OCR (Carrega uma vez e guarda em cache)
-@st.cache_resource
-def load_ocr():
-    return easyocr.Reader(['pt'])
-
-reader = load_ocr()
-
-def extrair_dados_etiqueta(imagem):
-    # Converte imagem para array
-    img_array = np.array(imagem)
-    resultado = reader.readtext(img_array, detail=0)
-    # Aqui entra a lógica para identificar o CEP ou Endereço no meio do texto
-    # Exemplo simplificado: procurando um padrão de CEP
-    texto_completo = " ".join(resultado)
-    return texto_completo
-
-# --- INTERFACE ---
-st.sidebar.image("https://r.jina.ai/i/6f9a0c...", width=150) # Sua logo
+# Interface com sua Logo
+st.sidebar.image("https://r.jina.ai/i/6f9a0c...", width=150)
 st.sidebar.title("FSA Roteirização")
-opcao = st.sidebar.radio("Menu", ["Escanear Etiquetas", "Ver Rota Otimizada"])
+menu = st.sidebar.radio("Navegação", ["Escanear Etiquetas", "Mapa de Rota"])
 
-if "lista_enderecos" not in st.session_state:
-    st.session_state.lista_enderecos = []
+# Banco de dados temporário (na sessão)
+if "entregas" not in st.session_state:
+    st.session_state.entregas = []
 
-if opcao == "Escanear Etiquetas":
-    st.header("📸 Escaneamento de Etiquetas")
+def extrair_cep(imagem):
+    # Converte imagem para escala de cinza para melhorar o OCR
+    texto = pytesseract.image_to_string(imagem, lang='por')
+    # Procura por padrões de CEP (00000-000 ou 00000000)
+    padrao_cep = re.search(r'\d{5}-?\d{3}', texto)
+    return padrao_cep.group(0) if padrao_cep else None
+
+if menu == "Escanear Etiquetas":
+    st.header("📸 Leitor de Etiquetas (FSA Express)")
     
-    upload = st.file_uploader("Tire uma foto ou suba a imagem da etiqueta", type=['png', 'jpg', 'jpeg'])
+    arquivo_foto = st.camera_input("Tire foto da etiqueta")
     
-    if upload:
-        img = Image.open(upload)
-        st.image(img, caption="Etiqueta carregada", width=300)
-        
-        if st.button("Processar e Extrair Endereço"):
-            texto = extrair_dados_etiqueta(img)
-            st.success(f"Texto detectado: {texto}")
+    if arquivo_foto:
+        img = Image.open(arquivo_foto)
+        with st.spinner('Lendo endereço...'):
+            cep_detectado = extrair_cep(img)
             
-            # Simulação de extração (Em um app real, usaríamos Regex para pegar o CEP)
-            endereco_fake = st.text_input("Confirme ou corrija o endereço extraído:", value=texto[:50])
-            
-            if st.button("Adicionar à Lista de Entrega"):
-                st.session_state.lista_enderecos.append(endereco_fake)
-                st.rerun()
+            if cep_detectado:
+                st.success(f"CEP Identificado: {cep_detectado}")
+                nome_cliente = st.text_input("Nome do Cliente (Opcional)")
+                
+                if st.button("Confirmar Entrega"):
+                    st.session_state.entregas.append({
+                        "cep": cep_detectado,
+                        "cliente": nome_cliente or "Cliente Avulso"
+                    })
+                    st.toast("Adicionado à lista!")
+            else:
+                st.error("Não foi possível ler o CEP. Tente aproximar mais a câmera.")
 
-    st.write("---")
-    st.subheader("📍 Lista de Entregas Atual")
-    st.write(st.session_state.lista_enderecos)
+    # Exibe lista atual
+    if st.session_state.entregas:
+        st.write("---")
+        st.subheader("📦 Entregas na Fila")
+        df = pd.DataFrame(st.session_state.entregas)
+        st.table(df)
+        if st.button("Limpar Lista"):
+            st.session_state.entregas = []
+            st.rerun()
 
-elif opcao == "Ver Rota Otimizada":
-    st.header("🚚 Rota Estilo SPX")
+elif menu == "Mapa de Rota":
+    st.header("🚚 Rota Otimizada")
     
-    if len(st.session_state.lista_enderecos) < 2:
-        st.warning("Adicione pelo menos 2 endereços para gerar uma rota.")
+    if not st.session_state.entregas:
+        st.warning("Nenhuma entrega registrada.")
     else:
-        # Aqui integraríamos com a API do Google Maps ou OpenStreetMap (OSRM)
-        st.info("Otimizando sequência de entrega para menor tempo...")
+        # Aqui o sistema organizaria os CEPs por proximidade
+        st.info("Visualizando pontos de entrega em Formosa-GO")
         
-        # Simulação de Mapa
-        m = folium.Map(location=[-15.44, -47.28], zoom_start=13) # Coordenadas de Formosa-GO
+        # Mapa centralizado em Formosa
+        m = folium.Map(location=[-15.53, -47.33], zoom_start=14)
         
-        # Adicionando marcadores (Simulados)
-        for i, end in enumerate(st.session_state.lista_enderecos):
+        for idx, item in enumerate(st.session_state.entregas):
             folium.Marker(
-                location=[-15.44 - (i*0.01), -47.28 - (i*0.01)], # Offset simulado
-                popup=f"Parada {i+1}: {end}",
-                icon=folium.Icon(color="purple", icon="shopping-cart")
+                [-15.53 - (idx*0.005), -47.33 - (idx*0.005)], # Simulação de geolocalização por CEP
+                popup=f"Parada {idx+1}: {item['cliente']}\nCEP: {item['cep']}",
+                tooltip=f"Entrega {idx+1}"
             ).add_to(m)
-        
-        st_folium(m, width=1000, height=500)
-        
-        st.subheader("📋 Sequência de Entrega Sugerida")
-        for i, end in enumerate(st.session_state.lista_enderecos):
-            st.write(f"**{i+1}ª Parada:** {end}")
+            
+        st_folium(m, width=1000)
