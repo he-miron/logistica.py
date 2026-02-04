@@ -8,7 +8,7 @@ st.set_page_config(page_title="FSA Smart Reader", layout="centered", page_icon="
 
 # Inserir sua chave API do Google AI Studio aqui
 # Obtenha em: https://aistudio.google.com/
-API_KEY = "AIzaSyAUooaL_Af80P4QwGq7Kv3mgL6AaP0_fOE"
+API_KEY = "AIzaSyA6DVvDWwiVss6hF90klKgF8cD2Qwmppxw"
 genai.configure(api_key=API_KEY)
 
 # Estilo para parecer um App Nativo Premium
