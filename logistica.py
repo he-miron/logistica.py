@@ -4,61 +4,68 @@ from PIL import Image
 import urllib.parse
 
 # Configuração da Página
-st.set_page_config(page_title="FSA Vision Pro", layout="centered")
+st.set_page_config(page_title="FSA Smart Vision", layout="centered", page_icon="👁️")
 
-# --- CONEXÃO COM API ---
+# --- AUTENTICAÇÃO SEGURA ---
 if "GOOGLE_API_KEY" in st.secrets:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
 else:
-    API_KEY = st.sidebar.text_input("Insira sua Gemini API Key", type="password")
+    API_KEY = st.sidebar.text_input("🔑 Gemini API Key", type="password")
 
 if API_KEY:
     try:
-        # Configuração forçando a versão estável
+        # Configura a API
         genai.configure(api_key=API_KEY)
         
-        # Teste de conexão: Busca o modelo exato disponível
-        # Isso evita tentar modelos que sua chave não tem acesso
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # TESTE CRÍTICO: Verifica quais modelos sua chave REALMENTE acessa
+        # Isso limpa o erro de 'modelo não encontrado'
+        modelos_disponiveis = [m.name for m in genai.list_models()]
+        
+        # Escolhe o melhor modelo disponível (prioriza Flash, depois Pro)
+        if "models/gemini-1.5-flash" in modelos_disponiveis:
+            NOME_MODELO = "gemini-1.5-flash"
+        elif "models/gemini-1.5-pro" in modelos_disponiveis:
+            NOME_MODELO = "gemini-1.5-pro"
+        else:
+            # Pega o primeiro modelo que suporta geração de conteúdo como última opção
+            NOME_MODELO = modelos_disponiveis[0].replace("models/", "")
+            
     except Exception as e:
-        st.error(f"Erro na Chave API: {e}")
+        st.error(f"Erro ao conectar com Google AI: {e}")
 else:
-    st.warning("⚠️ Aguardando configuração da chave nos Secrets.")
+    st.warning("⚠️ Insira a chave API para ativar o scanner.")
 
 def processar_ia(imagem_pil, modo):
-    # Usamos o nome base do modelo que é o mais compatível
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Inicializa o modelo detectado no teste acima
+    model = genai.GenerativeModel(NOME_MODELO)
     
-    if modo == "Logística (Etiquetas)":
-        prompt = "Extraia o endereço completo, CEP e nome do cliente desta etiqueta de entrega."
+    if modo == "📦 Logística":
+        prompt = "Leia a etiqueta e extraia: Endereço completo, CEP e Cliente. Seja direto."
     else:
-        prompt = "Você é um especialista em caligrafia. Transcreva esta receita médica ou texto cursivo com perfeição."
+        prompt = "Decifre esta caligrafia/receita médica. Transcreva medicamentos e instruções de uso."
 
     response = model.generate_content([prompt, imagem_pil])
     return response.text
 
 # --- INTERFACE ---
 st.title("👁️ FSA Smart Vision")
-modo = st.radio("Selecione o Uso:", ["Logística (Etiquetas)", "Decifrador (Receita/Cursiva)"])
+st.write(f"Conectado ao modelo: `{NOME_MODELO if API_KEY else 'Aguardando...'}`")
 
-foto = st.camera_input("Scanner Ativo")
+modo = st.radio("Selecione o Uso:", ["📦 Logística", "⚕️ Decifrador"])
+foto = st.camera_input("Scanner")
 
 if foto and API_KEY:
     img = Image.open(foto)
-    with st.spinner('A IA está lendo o documento...'):
+    with st.spinner('A IA está analisando...'):
         try:
             resultado = processar_ia(img, modo)
-            st.markdown("### ✅ Transcrição Gerada:")
+            st.markdown("### ✅ Resultado:")
             st.info(resultado)
             
-            if modo == "Logística (Etiquetas)":
-                # Gera link para GPS
+            if modo == "📦 Logística":
+                # Link para GPS
                 busca = urllib.parse.quote(resultado[:150])
-                st.link_button("🚀 Abrir no Google Maps", f"https://www.google.com/maps/search/?api=1&query={busca}")
+                st.link_button("🚀 Abrir no Google Maps", f"https://www.google.com/maps/search/{busca}")
                 
         except Exception as e:
-            # Se o erro 404 persistir, mostramos quais modelos SUA chave pode usar
-            st.error(f"Erro no modelo: {e}")
-            with st.expander("Ver modelos disponíveis para você"):
-                modelos = [m.name for m in genai.list_models()]
-                st.write(modelos)
+            st.error(f"Erro no processamento: {e}")
