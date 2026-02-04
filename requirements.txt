@@ -1,8 +1,6 @@
 streamlit
-easyocr
-numpy
+pytesseract
 Pillow
-pandas
 folium
 streamlit-folium
-opencv-python-headless
+pandas
