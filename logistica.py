@@ -3,86 +3,111 @@ import google.generativeai as genai
 from PIL import Image
 import urllib.parse
 
-# 1. Configurações de Segurança e Interface
+# --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="FSA Smart Vision", layout="centered", page_icon="👁️")
 
+# Estilo CSS para modo noturno e cards profissionais
 st.markdown("""
     <style>
     .stCamera { border: 4px solid #7000FF; border-radius: 20px; }
-    .result-box { background-color: #1e1e1e; padding: 20px; border-radius: 15px; border-left: 6px solid #00FF00; color: white; }
+    .result-box { 
+        background-color: #1e1e1e; 
+        padding: 20px; 
+        border-radius: 15px; 
+        border-left: 6px solid #00FF00; 
+        color: white;
+        font-family: 'Courier New', Courier, monospace;
+    }
+    .main-title { color: #7000FF; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Configuração da API
-# Tenta pegar a chave do Streamlit Cloud Secrets primeiro
-try:
+# --- CONFIGURAÇÃO DA API (SEGURANÇA) ---
+# Tenta buscar nos Secrets do Streamlit Cloud. Se não achar, abre campo no app.
+if "GOOGLE_API_KEY" in st.secrets:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
-except:
-    # Se rodar localmente, coloque sua chave aqui
-    API_KEY = "SUA_CHAVE_AQUI"
+else:
+    API_KEY = st.sidebar.text_input("Insira sua Gemini API Key", type="password")
 
-genai.configure(api_key=API_KEY)
-
-def processar_com_ia(imagem_pil, modo):
-    # Usamos o nome de modelo mais estável disponível atualmente
-    # Se 'gemini-1.5-flash' der 404, o sistema tentará o 'gemini-1.5-pro'
+if API_KEY:
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-    except:
-        model = genai.GenerativeModel('gemini-pro-vision') # Fallback para versões antigas
+        genai.configure(api_key=API_KEY)
+    except Exception as e:
+        st.error(f"Erro ao configurar API: {e}")
+else:
+    st.warning("⚠️ Aguardando Chave API. Configure nos Secrets do Streamlit Cloud.")
 
-    if modo == "Logística (Etiquetas)":
+# --- FUNÇÃO DE INTELIGÊNCIA ARTIFICIAL ---
+def processar_com_ia(imagem_pil, modo):
+    # Usando o modelo estável mais recente
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    if modo == "📦 Logística (Etiquetas)":
         prompt = """
         Você é um assistente de logística da FSA Market. 
-        Analise a imagem da etiqueta e extraia COM PRECISÃO:
-        1. Endereço completo (Rua, Número, Bairro, Cidade).
-        2. CEP (apenas números).
-        3. Nome do Cliente (se visível).
-        Responda em formato de lista simples.
+        Analise a etiqueta e extraia APENAS:
+        - Endereço completo (Rua, Número, Bairro, Cidade)
+        - CEP (apenas números)
+        - Nome do Cliente
+        Formate como uma lista simples e limpa.
         """
     else:
         prompt = """
         Você é um especialista em decifrar caligrafia médica e textos cursivos complexos. 
-        Transcreva o texto da imagem de forma fiel e organizada. 
-        Se for uma receita, identifique medicamentos e dosagens.
+        Transcreva o texto desta imagem de forma fiel e perfeita. 
+        Se for uma receita médica, organize por Medicamentos, Dosagens e Instruções.
+        Se o texto estiver muito difícil, use o contexto médico para deduzir.
         """
 
     response = model.generate_content([prompt, imagem_pil])
     return response.text
 
-# 3. Interface do Usuário
-st.sidebar.image("https://r.jina.ai/i/6f9a0c...", width=120) # Logo FSA
-st.title("👁️ FSA Smart Vision")
-st.caption("Leitor de Inteligência Artificial para Logística e Documentos")
+# --- INTERFACE DO USUÁRIO ---
+st.sidebar.image("https://r.jina.ai/i/6f9a0c...", width=120) # Sua Logo FSA
+st.sidebar.title("FSA Smart Vision")
+st.sidebar.markdown("---")
 
-modo = st.segmented_control("O que vamos ler agora?", ["Logística (Etiquetas)", "Manuscrito (Receitas)"], default="Logística (Etiquetas)")
+st.markdown("<h1 class='main-title'>👁️ Smart Reader Pro</h1>", unsafe_allow_html=True)
 
-foto = st.camera_input("POSICIONE O PAPEL NA FRENTE DA CÂMERA")
+# Seleção de modo de uso
+modo = st.radio("Selecione o modo de leitura:", ["📦 Logística (Etiquetas)", "⚕️ Decifrador (Receita/Cursiva)"])
 
-if foto:
+# Captura de Imagem
+foto = st.camera_input("POSICIONE O PAPEL E TIRE A FOTO")
+
+if foto and API_KEY:
     img = Image.open(foto)
     
-    with st.spinner('A IA está processando os dados...'):
+    with st.spinner('A IA está analisando a imagem...'):
         try:
-            texto_decifrado = processar_com_ia(img, modo)
+            resultado = processar_com_ia(img, modo)
             
-            st.markdown("### ✅ Resultado da Transcrição")
-            st.markdown(f"<div class='result-box'>{texto_decifrado}</div>", unsafe_allow_html=True)
+            st.markdown("### 📝 Resultado da Transcrição")
+            st.markdown(f"<div class='result-box'>{resultado}</div>", unsafe_allow_html=True)
 
-            if modo == "Logística (Etiquetas)":
-                # Tenta extrair o endereço para o botão de GPS
-                linhas = texto_decifrado.split('\n')
-                endereco_para_mapa = ""
+            # Lógica extra para Logística (Botão GPS)
+            if modo == "📦 Logística (Etiquetas)":
+                # Tenta isolar o endereço para o Google Maps
+                linhas = resultado.split('\n')
+                endereco_final = ""
                 for linha in linhas:
                     if "Endereço" in linha or "Rua" in linha:
-                        endereco_para_mapa = linha.split(":")[-1].strip()
+                        endereco_final = linha.split(":")[-1].strip()
                 
-                if endereco_para_mapa:
-                    link_maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(endereco_para_mapa)}"
-                    st.link_button("🚀 ABRIR NO GOOGLE MAPS", link_maps)
+                if endereco_final:
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(endereco_final)}"
+                    st.link_button("🚀 ABRIR ROTA NO GOOGLE MAPS", maps_url)
             
-            st.button("📥 SALVAR NO HISTÓRICO")
+            # Botão para copiar/salvar (simulado)
+            st.button("📋 Salvar no Histórico Diário")
 
         except Exception as e:
-            st.error(f"Erro de Conexão: {str(e)}")
-            st.info("Dica: Verifique se sua API KEY está ativa no Google AI Studio.")
+            st.error(f"Erro no processamento: {e}")
+            st.info("Verifique se sua API Key é válida e se você tem conexão com a internet.")
+
+elif not API_KEY:
+    st.info("ℹ️ Para começar, insira sua API Key no menu lateral ou nos Secrets.")
+
+# Rodapé informando a origem
+st.markdown("---")
+st.caption("FSA Market | Formosa-GO | Powered by Gemini AI 1.5 Flash")
